@@ -4,7 +4,6 @@
 
 
 void* ptr_bufcache;
-//struct list buffer_head_list;
 static struct buffer_head buffer_head_list[BUFFER_CACHE_ENTRY_NUMBER];
 static int clock;
 
@@ -14,7 +13,8 @@ void bufcache_init (void)
 	ptr_bufcache = malloc(512 * BUFFER_CACHE_ENTRY_NUMBER);
 	for (int i = 0; i < BUFFER_CACHE_ENTRY_NUMBER; i++) {
 		buffer_head_list[i].cache = false;
-		buffer_head_list[i].data = malloc(BLOCK_SECTOR_SIZE);
+		buffer_head_list[i].dirty = false;
+		buffer_head_list[i].data = ptr_bufcache + BLOCK_SECTOR_SIZE*i;
 	}
 
 	lock_init(&bufcache_lock);
@@ -39,10 +39,9 @@ void bufcache_delete (void)
 //memcpy를 사용해, buffer cache에 있는 데이터를 buf에 복사
 //buffer head 갱신. 아마 dirty나 cache같은 플래그...?
 //나중에 inode_read_at 함수에 있는 block_read를 bc_read로 수정
-bool bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
+void bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
 {
 	lock_acquire(&bufcache_lock);
-
 	struct buffer_head* buf_head = bufcache_find(sector_idx);
 	if (buf_head == NULL)
 	{
@@ -53,21 +52,19 @@ bool bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
 		else {
 			buf_head = &buffer_head_list[cacheIdx];
 		}
-
 		buf_head->dirty = false;
 		buf_head->sector = sector_idx;
 		buf_head->cache = true;
 		block_read(fs_device, sector_idx, buf_head->data);
 	}
 
-	memcpy(buf, buf_head->data, chunk_size);
-
+	memcpy(buf, buf_head->data, BLOCK_SECTOR_SIZE);
 	lock_release(&bufcache_lock);
 
-	return true;	//나중에 실패하는거 check해서 false return시키기
+	//return true;	//나중에 실패하는거 check해서 false return시키기
 }
 
-bool bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
+void bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
 {
 	lock_acquire(&bufcache_lock);
 
@@ -87,16 +84,15 @@ bool bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
 		block_read(fs_device, sector_idx, buf_head->data);
 	}
 	//printf("trying memcpy...\n");
-	memcpy(buf_head->data, buf, chunk_size);
+	memcpy(buf_head->data, buf, BLOCK_SECTOR_SIZE);
 	//printf("success\n");
 	buf_head->dirty = true;
 
 	lock_release(&bufcache_lock);
 
-	return true;	//나중에 실패하는거 check해서 false return시키기
+	//return true;	//나중에 실패하는거 check해서 false return시키기
 }
 
-//buffer head list에서 pop front
 //victim이 dirty인 경우 flush
 //victim이 있던 buffer_head 갱신
 //return victim
@@ -140,10 +136,9 @@ void bufcache_flush_all (void)
 {
 	lock_acquire(&bufcache_lock);
 
-	struct list_elem* e;
 	for (int i = 0; i < BUFFER_CACHE_ENTRY_NUMBER; i++)
 	{
-		if (buffer_head_list[i].dirty) {
+		if (buffer_head_list[i].cache && buffer_head_list[i].dirty) {
 			bufcache_flush(&buffer_head_list[i]);
 		}
 	}

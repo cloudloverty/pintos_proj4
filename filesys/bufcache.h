@@ -21,8 +21,8 @@ struct lock bufcache_lock;
 
 void bufcache_init(void);
 void bufcache_delete(void);
-bool bufcache_read(block_sector_t, void*, int);
-bool bufcache_write(block_sector_t, void*, int);
+void bufcache_read(block_sector_t, void*, int);
+void bufcache_write(block_sector_t, void*, int);
 struct buffer_head* bufcache_select_victim(void);
 struct buffer_head* bufcache_find(block_sector_t);
 void bufcache_flush(struct buffer_head*);
