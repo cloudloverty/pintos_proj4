@@ -5,6 +5,7 @@
 #include <string.h>
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
+#include "filesys/bufcache.h"
 #include "threads/malloc.h"
 
 /* Identifies an inode. */
@@ -62,6 +63,7 @@ void
 inode_init (void) 
 {
   list_init (&open_inodes);
+  bufcache_init();
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -204,6 +206,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
 
+
   while (size > 0) 
     {
       /* Disk sector to read, starting byte offset within sector. */
@@ -222,11 +225,14 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
         {
+		  //printf("not partial\n");
           /* Read full sector directly into caller's buffer. */
-          block_read (fs_device, sector_idx, buffer + bytes_read);
+		  bufcache_read(sector_idx, buffer + bytes_read, chunk_size);
+          //block_read (fs_device, sector_idx, buffer + bytes_read);
         }
       else 
         {
+		  //printf("partial\n");
           /* Read sector into bounce buffer, then partially copy
              into caller's buffer. */
           if (bounce == NULL) 
@@ -235,6 +241,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
               if (bounce == NULL)
                 break;
             }
+		  //bufcache_read(sector_idx, bounce, chunk_size);
           block_read (fs_device, sector_idx, bounce);
           memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
         }
@@ -284,7 +291,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (sector_ofs == 0 && chunk_size == BLOCK_SECTOR_SIZE)
         {
           /* Write full sector directly to disk. */
-          block_write (fs_device, sector_idx, buffer + bytes_written);
+          //block_write (fs_device, sector_idx, buffer + bytes_written);
+		  bufcache_write(sector_idx, buffer + bytes_written, chunk_size);
         }
       else 
         {
