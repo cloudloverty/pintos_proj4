@@ -39,7 +39,7 @@ void bufcache_delete (void)
 //memcpy를 사용해, buffer cache에 있는 데이터를 buf에 복사
 //buffer head 갱신. 아마 dirty나 cache같은 플래그...?
 //나중에 inode_read_at 함수에 있는 block_read를 bc_read로 수정
-void bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
+bool bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
 {
 	lock_acquire(&bufcache_lock);
 	struct buffer_head* buf_head = bufcache_find(sector_idx);
@@ -61,10 +61,10 @@ void bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
 	memcpy(buf, buf_head->data, BLOCK_SECTOR_SIZE);
 	lock_release(&bufcache_lock);
 
-	//return true;	//나중에 실패하는거 check해서 false return시키기
+	return true;	//나중에 실패하는거 check해서 false return시키기
 }
 
-void bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
+bool bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
 {
 	lock_acquire(&bufcache_lock);
 
@@ -90,7 +90,7 @@ void bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
 
 	lock_release(&bufcache_lock);
 
-	//return true;	//나중에 실패하는거 check해서 false return시키기
+	return true;	//나중에 실패하는거 check해서 false return시키기
 }
 
 //victim이 dirty인 경우 flush
