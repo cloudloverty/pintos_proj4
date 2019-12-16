@@ -3,6 +3,7 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 
+
 /* An open file. */
 struct file 
   {
@@ -166,3 +167,18 @@ file_tell (struct file *file)
   ASSERT (file != NULL);
   return file->pos;
 }
+
+block_sector_t
+file_get_sector(struct file* file)
+{
+	ASSERT(file != NULL);
+	return inode_get_sector(file_get_inode(file));
+}
+
+// I dig my hole
+//struct inode*
+//file_inode(struct file* file)
+//{
+//	ASSERT(file != NULL);
+//	return file->inode;
+//}

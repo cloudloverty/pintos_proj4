@@ -22,6 +22,11 @@ int write(int, const void*, unsigned);
 void seek(int, unsigned);
 unsigned tell(int);
 void close(int);
+bool chdir(const char*);
+bool mkdir(const char*);
+bool readdir(int, char*);
+bool isdir(int);
+int inumber(int);
 
 int new_file(struct file*);
 struct file* get_file(int);

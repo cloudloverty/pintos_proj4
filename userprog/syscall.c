@@ -5,6 +5,8 @@
 #include "threads/thread.h"
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/file.h"
 
 
 static void syscall_handler (struct intr_frame *);
@@ -105,6 +107,30 @@ syscall_handler (struct intr_frame *f UNUSED)
 	  close((int) * (uint32_t*)argv[0]);
 	  break;
 
+  case SYS_CHDIR:
+	  set_arg(f->esp, argv, 1);
+	  f->eax = chdir((const char*) * (uint32_t*)argv[0]);
+	  break;
+
+  case SYS_MKDIR:
+	  set_arg(f->esp, argv, 1);
+	  check_add_valid(argv[0]);
+	  f->eax = mkdir((const char*) * (uint32_t*)argv[0]);
+	  break;
+
+  case SYS_READDIR:
+	  set_arg(f->esp, argv, 2);
+	  f->eax = readdir((int) * (uint32_t*)argv[0], (char*) * (uint32_t*)argv[1]);
+
+  case SYS_ISDIR:
+	  set_arg(f->esp, argv, 1);
+	  f->eax = isdir((int) * (uint32_t*)argv[0]);
+	  break;
+
+  case SYS_INUMBER:
+	  set_arg(f->esp, argv, 1);
+	  f->eax = inumber((int) * (uint32_t*)argv[0]);
+	  break;
 
   }
 
@@ -227,6 +253,7 @@ remove(const char* file)
 	check_add_valid(file);
 
 	if (*file == NULL) exit(-1);
+	if (strcmp(file, "/") == 0) return false;
 	return filesys_remove(file);
 }
 
@@ -234,10 +261,11 @@ int			//6
 open(const char* file)
 {
 	check_add_valid(file);
-	if (file == NULL) return -1;
+	if (file == NULL) {
+		return -1;
+	}
 
 	lock_acquire(&filesys_lock);
-
 	struct file* open_file = filesys_open(file);
 	if (open_file == NULL) {
 		lock_release(&filesys_lock);
@@ -308,7 +336,12 @@ write(int fd, const void* buffer, unsigned size)
 			return -1; 
 		}
 
-		
+		struct inode* inode = file_get_inode(f);
+		if (inode_is_dir(inode)) {
+			lock_release(&filesys_lock);
+			return -1;			// can not write to dir
+		}
+
 		int ans = file_write(f, buffer, size);
 		
 		lock_release(&filesys_lock);
@@ -340,6 +373,58 @@ close(int fd)
 	struct file* f = get_file(fd);
 	if (f == NULL) exit(-1);
 	close_file(fd);
+}
+
+bool		//13
+chdir(const char* dir)
+{
+	//check_add_valid(dir);
+	bool result = filesys_chdir(dir);
+	return result;
+}
+
+bool		//14
+mkdir(const char* dir)
+{
+	check_add_valid(dir);
+	if (strlen(dir) == 0) {
+		return false;
+	}
+	return filesys_create_dir(dir, 0);
+}
+
+bool		//15
+readdir(int fd, char* name)
+{
+	struct file* f = get_file(fd);
+	if (f == NULL) 
+		return false;
+	struct inode* inode = file_get_inode(f);
+	if (!inode_is_dir(inode)) {			// file
+		return false;
+	}
+
+	struct dir* dir = dir_open(inode);
+	bool result = dir_readdir(dir, name);
+	dir_close(dir);
+	return result;
+}
+
+bool		//16
+isdir (int fd)
+{
+	struct file* f = get_file(fd);
+	if (f == NULL) exit(-1);
+	if (inode_is_dir(file_get_inode(f))) return true;
+	else return false;
+}
+
+int
+inumber(int fd)
+{
+	struct file* f = get_file(fd);
+	if (f == NULL) exit(-1);
+	return file_get_sector(f);
 }
 
 

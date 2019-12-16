@@ -117,6 +117,8 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+	struct dir* dir;						// info of currently working dir
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

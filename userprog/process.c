@@ -275,6 +275,9 @@ process_exit (void)
   file_close(cur->running_file);
   cur->running_file = NULL;
 
+  if (thread_current()->dir != NULL)
+	dir_close(cur->dir);
+
   ////////////////////+++++++++++++++++++///////////////////////////////
   struct thread* c;
   struct list_elem* e;

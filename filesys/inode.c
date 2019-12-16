@@ -7,18 +7,24 @@
 #include "filesys/free-map.h"
 #include "filesys/bufcache.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
+
+#define SLASH_CHAR 47
+
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
+	unsigned fileOrDir;
+	block_sector_t parent;				// parent directory
     block_sector_t start;               /* First data sector. */
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    uint32_t unused[123];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -72,13 +78,12 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, unsigned fileOrDir)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
 
   ASSERT (length >= 0);
-
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
   ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
@@ -89,6 +94,9 @@ inode_create (block_sector_t sector, off_t length)
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
+	  disk_inode->fileOrDir = fileOrDir;
+	  if (thread_current()->dir != NULL)
+		  disk_inode->parent = thread_current()->dir;
       if (free_map_allocate (sectors, &disk_inode->start)) 
         {
           block_write (fs_device, sector, disk_inode);
@@ -127,7 +135,6 @@ inode_open (block_sector_t sector)
           return inode; 
         }
     }
-
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
   if (inode == NULL)
@@ -353,4 +360,45 @@ off_t
 inode_length (const struct inode *inode)
 {
   return inode->data.length;
+}
+
+bool
+inode_is_dir (struct inode* inode)
+{
+	unsigned isDir = (inode->data).fileOrDir;
+	if (isDir == DIR)
+		return true;
+	else
+		return false;
+}
+
+block_sector_t
+inode_get_sector(struct inode* inode)
+{
+	return inode->sector;
+}
+
+block_sector_t
+inode_get_parent(struct inode* inode)
+{
+	return (inode->data).parent;
+}
+
+void
+inode_set_parent(struct inode* inode, block_sector_t parent_sector)
+{
+	(inode->data).parent = parent_sector;
+	//block_write(inode->sector, &inode->data);
+}
+
+int
+inode_get_open_cnt(struct inode* inode)
+{
+	return inode->open_cnt;
+}
+
+bool
+inode_get_removed(struct inode* inode)
+{
+	return inode->removed;
 }

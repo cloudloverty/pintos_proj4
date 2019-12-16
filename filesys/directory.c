@@ -24,9 +24,15 @@ struct dir_entry
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, struct inode* parent)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  bool success = inode_create(sector, entry_cnt * sizeof(struct dir_entry), DIR);
+  if (parent != NULL) {
+	  struct inode* inode = inode_open(sector);
+	  inode_set_parent(inode, inode_get_sector(parent));
+	  inode_close(inode);
+  }
+  return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -98,16 +104,19 @@ lookup (const struct dir *dir, const char *name,
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
-  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
-       ofs += sizeof e) 
-    if (e.in_use && !strcmp (name, e.name)) 
-      {
-        if (ep != NULL)
-          *ep = e;
-        if (ofsp != NULL)
-          *ofsp = ofs;
-        return true;
-      }
+
+  for (ofs = 0; inode_read_at(dir->inode, &e, sizeof e, ofs) == sizeof e;
+	  ofs += sizeof e) {
+	  if (e.in_use && !strcmp(name, e.name))
+	  {
+		  if (ep != NULL)
+			  *ep = e;
+		  if (ofsp != NULL)
+			  *ofsp = ofs;
+		  return true;
+	  }
+  }
+  //printf("cannot find %s in given dir\n", name);
   return false;
 }
 
@@ -123,11 +132,18 @@ dir_lookup (const struct dir *dir, const char *name,
 
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
-  if (lookup (dir, name, &e, NULL))
-    *inode = inode_open (e.inode_sector);
-  else
-    *inode = NULL;
+  //printf("dirlookup\n");
+  if (lookup(dir, name, &e, NULL)) {
+	  *inode = inode_open(e.inode_sector);
+	  //printf("find %s in given dir\n", name);
+  }
+  else {
+	  //printf("cannot find %s\n", name);
+	  //printf("inode is null QQ\n");
+	  *inode = NULL;
+	  //printf("moving to next...\n");
+	  //return false;
+  }
 
   return *inode != NULL;
 }
@@ -152,9 +168,14 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
 
+  struct inode* inode = inode_open(inode_sector);
+  inode_close(inode);
+
   /* Check that NAME is not in use. */
-  if (lookup (dir, name, NULL, NULL))
-    goto done;
+  if (lookup(dir, name, NULL, NULL))
+	  goto done;
+  
+
 
   /* Set OFS to offset of free slot.
      If there are no free slots, then it will be set to the
@@ -181,6 +202,7 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
 /* Removes any entry for NAME in DIR.
    Returns true if successful, false on failure,
    which occurs only if there is no file with the given NAME. */
+/* Cannot delete process that being used by other process */
 bool
 dir_remove (struct dir *dir, const char *name) 
 {
@@ -195,11 +217,20 @@ dir_remove (struct dir *dir, const char *name)
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
-
   /* Open inode. */
   inode = inode_open (e.inode_sector);
   if (inode == NULL)
     goto done;
+
+  //if (!dir_is_empty(inode))
+	 // printf("dir is not empty. Cannot remove!\n");
+  //else
+	 // printf("dir is empty. Safe to remove\n");
+  // if inode is used by other process, have file => should not be deleted
+  //
+  if ((inode_is_dir(inode) && inode_get_open_cnt(inode) > 1) 
+	  || (inode_is_dir(inode) && dir_is_empty(inode) == false))
+	  goto done;
 
   /* Erase directory entry. */
   e.in_use = false;
@@ -233,4 +264,37 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+struct inode*
+dir_get_parent (struct dir* dir)
+{
+	ASSERT(dir != NULL);
+
+	return inode_open(inode_get_parent(dir_get_inode(dir)));
+}
+
+bool
+dir_is_empty (struct inode* inode)
+{
+	struct dir_entry e;
+	off_t ofs;
+	for (ofs = 0; inode_read_at(inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e) 
+	{
+		if (e.in_use)
+			return false;
+	}
+	return true;
+}
+
+int
+dir_get_dirEntrySize (void)
+{
+	return sizeof(struct dir_entry);
+}
+
+bool
+dir_is_root(struct dir* dir)
+{
+	return inode_get_inumber(dir->inode) == ROOT_DIR_SECTOR;
 }
