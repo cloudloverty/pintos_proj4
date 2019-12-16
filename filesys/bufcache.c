@@ -1,4 +1,6 @@
 #include "filesys/bufcache.h"
+#include <string.h>
+#include "threads/malloc.h"
 
 #define BUFFER_CACHE_ENTRY_NUMBER 64
 
@@ -39,7 +41,7 @@ void bufcache_delete (void)
 //memcpy를 사용해, buffer cache에 있는 데이터를 buf에 복사
 //buffer head 갱신. 아마 dirty나 cache같은 플래그...?
 //나중에 inode_read_at 함수에 있는 block_read를 bc_read로 수정
-bool bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
+bool bufcache_read(block_sector_t sector_idx, void* buf, off_t off, int chunk_size, off_t sector_off)
 {
 	lock_acquire(&bufcache_lock);
 	struct buffer_head* buf_head = bufcache_find(sector_idx);
@@ -58,13 +60,13 @@ bool bufcache_read (block_sector_t sector_idx, void* buf, int chunk_size)
 		block_read(fs_device, sector_idx, buf_head->data);
 	}
 
-	memcpy(buf, buf_head->data, BLOCK_SECTOR_SIZE);
+	memcpy(buf + off, buf_head->data + sector_off, chunk_size);
 	lock_release(&bufcache_lock);
 
 	return true;	//나중에 실패하는거 check해서 false return시키기
 }
 
-bool bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
+bool bufcache_write (block_sector_t sector_idx, void* buf, off_t off, int chunk_size, off_t sector_off)
 {
 	lock_acquire(&bufcache_lock);
 
@@ -84,7 +86,7 @@ bool bufcache_write (block_sector_t sector_idx, void* buf, int chunk_size)
 		block_read(fs_device, sector_idx, buf_head->data);
 	}
 	//printf("trying memcpy...\n");
-	memcpy(buf_head->data, buf, BLOCK_SECTOR_SIZE);
+	memcpy(buf_head->data + sector_off, buf + off, chunk_size);
 	//printf("success\n");
 	buf_head->dirty = true;
 
